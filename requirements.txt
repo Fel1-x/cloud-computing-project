@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+uproot
+awkward
+atlasopenmagic
+aiohttp
+requests
+
