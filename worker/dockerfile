@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy your script
-COPY HZZAnalysis_main.py .
-
+COPY HZZAnalysis_worker.py .
 # Run the script
-CMD [ "python", "-u", "./HZZAnalysis_main.py"]
+CMD [ "python", "-u", "./HZZAnalysis_worker.py"]
+

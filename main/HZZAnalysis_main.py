@@ -87,97 +87,53 @@ fraction = 1.0 # reduce this is if you want quicker runtime (implemented in the 
 # Define empty dictionary to hold awkward arrays
 all_data = {}
 
+import pika, json
 
-# Loop over samples
-for s in samples:
+params = pika.ConnectionParameters('rabbitmq',heartbeat=0)
+connection = pika.BlockingConnection(params)
+channel = connection.channel()
+channel.queue_declare(queue='task_queue')
+channel.queue_declare(queue='result_queue')
 
-    # Print which sample is being processed
-    print('Processing '+s+' samples')
+# Get the first key
+first_key = next(iter(samples))
 
-    # Define empty list to hold data
-    frames = []
+# Create a new dictionary with only that first item
+samples_first = {first_key: samples[first_key]}
 
-    # Loop over each file
-    for val in samples[s]['list']:
-        if s == 'data':
-            prefix = "Data/" # Data prefix
-        else: # MC prefix
-            prefix = "MC/mc_"
-        fileString = val
+# Count tasks
+total_tasks = len(samples_first[first_key]['list'])
 
-        # start the clock
-        start = time.time()
-        print("\t"+val+":")
+frames = []
 
-        # Open file
-        tree = uproot.open(fileString + ":analysis")
+# Send tasks
+for s in samples_first:   # iterate over the keys of the chopped dictionary
+    print(f"Processing {s} samples")
+    for idx in range(len(samples_first[s]['list'])):
+        channel.basic_publish(
+            exchange='',
+            routing_key='task_queue',
+            body=str(idx)
+        )
 
-        sample_data = []
+received_count = 0
+# Get results back
+def callback(ch, method, properties, body):
+    global received_count
+    serialized_data = json.loads(body.decode())
+    sample_data = [ak.from_json(d_json) for d_json in serialized_data]
+    frames.append(ak.concatenate(sample_data))
+    received_count += 1
+    if received_count >= total_tasks:
+        ch.stop_consuming()
 
-        # Loop over data in the tree
-        for data in tree.iterate(variables + weight_variables + ["sum_of_weights", "lep_n"],
-                                 library="ak",
-                                 entry_stop=tree.num_entries*fraction):#, # process up to numevents*fraction
-                                #  step_size = 10000000):
+channel.basic_consume(queue='result_queue', on_message_callback=callback, auto_ack=True)
 
-            # Number of events in this batch
-            nIn = len(data)
-
-            data = data[cut_trig(data.trigE, data.trigM)]
-            data = data[cut_trig_match(data.lep_isTrigMatched)]
-
-            # Record transverse momenta (see bonus activity for explanation)
-            data['leading_lep_pt'] = data['lep_pt'][:,0]
-            data['sub_leading_lep_pt'] = data['lep_pt'][:,1]
-            data['third_leading_lep_pt'] = data['lep_pt'][:,2]
-            data['last_lep_pt'] = data['lep_pt'][:,3]
-
-            # Cuts on transverse momentum
-            data = data[data['leading_lep_pt'] > 20]
-            data = data[data['sub_leading_lep_pt'] > 15]
-            data = data[data['third_leading_lep_pt'] > 10]
-
-            data = data[ID_iso_cut(data.lep_isLooseID,
-                                   data.lep_isMediumID,
-                                   data.lep_isLooseIso,
-                                   data.lep_isLooseIso,
-                                   data.lep_type)]
-
-            # Number Cuts
-            #data = data[data['lep_n'] == 4]
-
-            # Lepton cuts
-
-            lep_type = data['lep_type']
-            data = data[~cut_lep_type(lep_type)]
-            lep_charge = data['lep_charge']
-            data = data[~cut_lep_charge(lep_charge)]
-
-            # Invariant Mass
-            data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_e'])
-
-            # Store Monte Carlo weights in the data
-            if 'data' not in s: # Only calculates weights if the data is MC
-                data['totalWeight'] = calc_weight(weight_variables, data)
-                # data['totalWeight'] = calc_weight(data)
-
-            # Append data to the whole sample data list
-            sample_data.append(data)
-
-            if not 'data' in val:
-                nOut = sum(data['totalWeight']) # sum of weights passing cuts in this batch
-            else:
-                nOut = len(data)
-
-            elapsed = time.time() - start # time taken to process
-            print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
-
-        frames.append(ak.concatenate(sample_data))
-
-    all_data[s] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
-
+print("Waiting for results...")
+channel.start_consuming()
 
 # PLOTTING
+all_data["Data"] = ak.concatenate(frames)
 
 # x-axis range of the plot
 xmin = 80 * GeV

@@ -87,218 +87,113 @@ fraction = 1.0 # reduce this is if you want quicker runtime (implemented in the 
 # Define empty dictionary to hold awkward arrays
 all_data = {}
 
+import json, pika
 
-# Loop over samples
-for s in samples:
+params = pika.ConnectionParameters('rabbitmq',heartbeat=0)
+connection = pika.BlockingConnection(params)
+channel = connection.channel()
+channel.queue_declare(queue='task_queue')
+channel.queue_declare(queue='result_queue')
 
-    # Print which sample is being processed
-    print('Processing '+s+' samples')
+def calculation(idx):
+    frames=[]
 
-    # Define empty list to hold data
-    frames = []
+    first_key = next(iter(samples))
+    
+    val = samples[first_key]['list'][idx]
 
-    # Loop over each file
-    for val in samples[s]['list']:
-        if s == 'data':
-            prefix = "Data/" # Data prefix
-        else: # MC prefix
-            prefix = "MC/mc_"
-        fileString = val
+    fileString = val
 
-        # start the clock
-        start = time.time()
-        print("\t"+val+":")
+    # start the clock
+    start = time.time()
+    print("\t" + val + ":")
 
-        # Open file
-        tree = uproot.open(fileString + ":analysis")
+    # Open file
+    tree = uproot.open(fileString + ":analysis")
 
-        sample_data = []
+    sample_data = []
 
-        # Loop over data in the tree
-        for data in tree.iterate(variables + weight_variables + ["sum_of_weights", "lep_n"],
-                                 library="ak",
-                                 entry_stop=tree.num_entries*fraction):#, # process up to numevents*fraction
-                                #  step_size = 10000000):
+    # Loop over data in the tree
+    for data in tree.iterate(variables + weight_variables + ["sum_of_weights", "lep_n"],
+                             library="ak",
+                             entry_stop=tree.num_entries * fraction):  # , # process up to numevents*fraction
+        #  step_size = 10000000):
 
-            # Number of events in this batch
-            nIn = len(data)
+        # Number of events in this batch
+        nIn = len(data)
 
-            data = data[cut_trig(data.trigE, data.trigM)]
-            data = data[cut_trig_match(data.lep_isTrigMatched)]
+        data = data[cut_trig(data.trigE, data.trigM)]
+        data = data[cut_trig_match(data.lep_isTrigMatched)]
 
-            # Record transverse momenta (see bonus activity for explanation)
-            data['leading_lep_pt'] = data['lep_pt'][:,0]
-            data['sub_leading_lep_pt'] = data['lep_pt'][:,1]
-            data['third_leading_lep_pt'] = data['lep_pt'][:,2]
-            data['last_lep_pt'] = data['lep_pt'][:,3]
+        # Record transverse momenta (see bonus activity for explanation)
+        data['leading_lep_pt'] = data['lep_pt'][:, 0]
+        data['sub_leading_lep_pt'] = data['lep_pt'][:, 1]
+        data['third_leading_lep_pt'] = data['lep_pt'][:, 2]
+        data['last_lep_pt'] = data['lep_pt'][:, 3]
 
-            # Cuts on transverse momentum
-            data = data[data['leading_lep_pt'] > 20]
-            data = data[data['sub_leading_lep_pt'] > 15]
-            data = data[data['third_leading_lep_pt'] > 10]
+        # Cuts on transverse momentum
+        data = data[data['leading_lep_pt'] > 20]
+        data = data[data['sub_leading_lep_pt'] > 15]
+        data = data[data['third_leading_lep_pt'] > 10]
 
-            data = data[ID_iso_cut(data.lep_isLooseID,
-                                   data.lep_isMediumID,
-                                   data.lep_isLooseIso,
-                                   data.lep_isLooseIso,
-                                   data.lep_type)]
+        data = data[ID_iso_cut(data.lep_isLooseID,
+                               data.lep_isMediumID,
+                               data.lep_isLooseIso,
+                               data.lep_isLooseIso,
+                               data.lep_type)]
 
-            # Number Cuts
-            #data = data[data['lep_n'] == 4]
+        # Number Cuts
+        # data = data[data['lep_n'] == 4]
 
-            # Lepton cuts
+        # Lepton cuts
 
-            lep_type = data['lep_type']
-            data = data[~cut_lep_type(lep_type)]
-            lep_charge = data['lep_charge']
-            data = data[~cut_lep_charge(lep_charge)]
+        lep_type = data['lep_type']
+        data = data[~cut_lep_type(lep_type)]
+        lep_charge = data['lep_charge']
+        data = data[~cut_lep_charge(lep_charge)]
 
-            # Invariant Mass
-            data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_e'])
+        # Invariant Mass
+        data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_e'])
 
-            # Store Monte Carlo weights in the data
-            if 'data' not in s: # Only calculates weights if the data is MC
-                data['totalWeight'] = calc_weight(weight_variables, data)
-                # data['totalWeight'] = calc_weight(data)
+        # Store Monte Carlo weights in the data
+        if 'data' not in samples[first_key]:  # Only calculates weights if the data is MC
+            data['totalWeight'] = calc_weight(weight_variables, data)
+            # data['totalWeight'] = calc_weight(data)
 
-            # Append data to the whole sample data list
-            sample_data.append(data)
+        # Append data to the whole sample data list
+        sample_data.append(data)
 
-            if not 'data' in val:
-                nOut = sum(data['totalWeight']) # sum of weights passing cuts in this batch
-            else:
-                nOut = len(data)
+        if not 'data' in val:
+            nOut = sum(data['totalWeight'])  # sum of weights passing cuts in this batch
+        else:
+            nOut = len(data)
 
-            elapsed = time.time() - start # time taken to process
-            print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
+        elapsed = time.time() - start  # time taken to process
+        print("\t\t nIn: " + str(nIn) + ",\t nOut: \t" + str(nOut) + "\t in " + str(
+            round(elapsed, 1)))  # events before and after
 
-        frames.append(ak.concatenate(sample_data))
+    return sample_data
 
-    all_data[s] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
+def callback(ch, method, properties, body):
+    idx = int(body.decode())   # receive plain index
+    print(f"Worker processing index: {idx}")
 
+    sample_data = calculation(idx)
+    serialized_data = [ak.to_json(d) for d in sample_data]
 
-# PLOTTING
+    # Send result back
+    channel.basic_publish(
+        exchange='',
+        routing_key='result_queue',
+        body=json.dumps(serialized_data)
+    )
 
-# x-axis range of the plot
-xmin = 80 * GeV
-xmax = 250 * GeV
+    # Acknowledge completion
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
-# Histogram bin setup
-step_size = 2.5 * GeV
-bin_edges = np.arange(start=xmin, # The interval includes this value
-                    stop=xmax+step_size, # The interval doesn't include this value
-                    step=step_size ) # Spacing between values
-bin_centres = np.arange(start=xmin+step_size/2, # The interval includes this value
-                        stop=xmax+step_size/2, # The interval doesn't include this value
-                        step=step_size ) # Spacing between values
+# Ensure fair dispatch (one task at a time per worker)
+channel.basic_qos(prefetch_count=1)
+channel.basic_consume(queue='task_queue', on_message_callback=callback)
 
-data_x,_ = np.histogram(ak.to_numpy(all_data['Data']['mass']),
-                        bins=bin_edges ) # histogram the data
-data_x_errors = np.sqrt( data_x ) # statistical error on the data
-
-signal_x = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass']) # histogram the signal
-signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight) # get the weights of the signal events
-signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color'] # get the colour for the signal bar
-
-mc_x = [] # define list to hold the Monte Carlo histogram entries
-mc_weights = [] # define list to hold the Monte Carlo weights
-mc_colors = [] # define list to hold the colors of the Monte Carlo bars
-mc_labels = [] # define list to hold the legend labels of the Monte Carlo bars
-
-for s in samples: # loop over samples
-    if s not in ['Data', r'Signal ($m_H$ = 125 GeV)']: # if not data nor signal
-        mc_x.append( ak.to_numpy(all_data[s]['mass']) ) # append to the list of Monte Carlo histogram entries
-        mc_weights.append( ak.to_numpy(all_data[s].totalWeight) ) # append to the list of Monte Carlo weights
-        mc_colors.append( samples[s]['color'] ) # append to the list of Monte Carlo bar colors
-        mc_labels.append( s ) # append to the list of Monte Carlo legend labels
-
-# *************
-# Main plot
-# *************
-fig, main_axes = plt.subplots(figsize=(12, 8))
-
-# plot the data points
-main_axes.errorbar(x=bin_centres, y=data_x, yerr=data_x_errors,
-                    fmt='ko', # 'k' means black and 'o' is for circles
-                    label='Data')
-
-# plot the Monte Carlo bars
-mc_heights = main_axes.hist(mc_x, bins=bin_edges,
-                            weights=mc_weights, stacked=True,
-                            color=mc_colors, label=mc_labels )
-
-mc_x_tot = mc_heights[0][-1] # stacked background MC y-axis value
-
-# calculate MC statistical uncertainty: sqrt(sum w^2)
-mc_x_err = np.sqrt(np.histogram(np.hstack(mc_x), bins=bin_edges, weights=np.hstack(mc_weights)**2)[0])
-
-# plot the signal bar
-signal_heights = main_axes.hist(signal_x, bins=bin_edges, bottom=mc_x_tot,
-                weights=signal_weights, color=signal_color,
-                label=r'Signal ($m_H$ = 125 GeV)')
-
-# plot the statistical uncertainty
-main_axes.bar(bin_centres, # x
-                2*mc_x_err, # heights
-                alpha=0.5, # half transparency
-                bottom=mc_x_tot-mc_x_err, color='none',
-                hatch="////", width=step_size, label='Stat. Unc.' )
-
-# set the x-limit of the main axes
-main_axes.set_xlim( left=xmin, right=xmax )
-
-# separation of x axis minor ticks
-main_axes.xaxis.set_minor_locator( AutoMinorLocator() )
-
-# set the axis tick parameters for the main axes
-main_axes.tick_params(which='both', # ticks on both x and y axes
-                        direction='in', # Put ticks inside and outside the axes
-                        top=True, # draw ticks on the top axis
-                        right=True ) # draw ticks on right axis
-
-# x-axis label
-main_axes.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
-                    fontsize=13, x=1, horizontalalignment='right' )
-
-# write y-axis label for main axes
-main_axes.set_ylabel('Events / '+str(step_size)+' GeV',
-                        y=1, horizontalalignment='right')
-
-# set y-axis limits for main axes
-main_axes.set_ylim( bottom=0, top=np.amax(data_x)*2.0 )
-
-# add minor ticks on y-axis for main axes
-main_axes.yaxis.set_minor_locator( AutoMinorLocator() )
-
-# Add text 'ATLAS Open Data' on plot
-plt.text(0.1, # x
-            0.93, # y
-            'ATLAS Open Data', # text
-            transform=main_axes.transAxes, # coordinate system used is that of main_axes
-            fontsize=16 )
-
-# Add text 'for education' on plot
-plt.text(0.1, # x
-            0.88, # y
-            'for education', # text
-            transform=main_axes.transAxes, # coordinate system used is that of main_axes
-            style='italic',
-            fontsize=12 )
-
-# Add energy and luminosity
-lumi_used = str(lumi*fraction) # luminosity to write on the plot
-plt.text(0.1, # x
-            0.82, # y
-            r'$\sqrt{s}$=13 TeV,$\int$L dt = '+lumi_used+' fb$^{-1}$', # text
-            transform=main_axes.transAxes,fontsize=16 ) # coordinate system used is that of main_axes
-
-# Add a label for the analysis carried out
-plt.text(0.1, # x
-            0.76, # y
-            r'$H \rightarrow ZZ^* \rightarrow 4\ell$', # text
-            transform=main_axes.transAxes,fontsize=16 ) # coordinate system used is that of main_axes
-
-# draw the legend
-my_legend = main_axes.legend( frameon=False, fontsize=16 ) # no box around the legend
-
-plt.savefig("/app/plot.png")
+print("Worker waiting for indices...")
+channel.start_consuming()
