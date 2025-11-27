@@ -95,12 +95,9 @@ channel = connection.channel()
 channel.queue_declare(queue='task_queue')
 channel.queue_declare(queue='result_queue')
 
-def calculation(idx):
-    frames=[]
+def calculation(idx, s):
 
-    first_key = next(iter(samples))
-    
-    val = samples[first_key]['list'][idx]
+    val = samples[s]['list'][idx]
 
     fileString = val
 
@@ -121,6 +118,7 @@ def calculation(idx):
 
         # Number of events in this batch
         nIn = len(data)
+        print("\t" + str(nIn) + "< nIn")
 
         data = data[cut_trig(data.trigE, data.trigM)]
         data = data[cut_trig_match(data.lep_isTrigMatched)]
@@ -156,7 +154,7 @@ def calculation(idx):
         data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_e'])
 
         # Store Monte Carlo weights in the data
-        if 'data' not in samples[first_key]:  # Only calculates weights if the data is MC
+        if 'data' not in samples[s]:  # Only calculates weights if the data is MC
             data['totalWeight'] = calc_weight(weight_variables, data)
             # data['totalWeight'] = calc_weight(data)
 
@@ -175,25 +173,36 @@ def calculation(idx):
     return sample_data
 
 def callback(ch, method, properties, body):
-    idx = int(body.decode())   # receive plain index
-    print(f"Worker processing index: {idx}")
+    msg = body.decode()
+    if msg == "fin":
+        channel.stop_consuming()
+        connection.close()
+    else:
+        idx = int(msg)   # receive plain index
+        print(f"Worker processing index: {idx}")
+        s = properties.headers.get("sample_type")
 
-    sample_data = calculation(idx)
-    serialized_data = [ak.to_json(d) for d in sample_data]
+        sample_datas = []
+        sample_data = calculation(idx, s)
+        for c in sample_data:
+            for i in range(0, len(c), 10000):
+                sample_datas.append(c[i : i+10000])
+                print(f"saving {i} to {min(len(c), i+10000)}")
 
-    # Send result back
-    channel.basic_publish(
-        exchange='',
-        routing_key='result_queue',
-        body=json.dumps(serialized_data)
-    )
+        if sample_datas == []:
+            channel.basic_publish(exchange='', routing_key='result_queue', body="No data")
+        else:
+            # Send result back
+            for datum in sample_datas:
+                serialized_data = [ak.to_json(ak.Array([d])) for d in datum]
+                channel.basic_publish(exchange='', routing_key='result_queue', body=json.dumps(serialized_data),
+                                      properties=pika.BasicProperties(headers={"sample_type": s, "batch": len(sample_datas)}))
 
-    # Acknowledge completion
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+        # Acknowledge completion
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
 # Ensure fair dispatch (one task at a time per worker)
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(queue='task_queue', on_message_callback=callback)
 
-print("Worker waiting for indices...")
 channel.start_consuming()

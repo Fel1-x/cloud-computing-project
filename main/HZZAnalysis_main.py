@@ -101,29 +101,39 @@ first_key = next(iter(samples))
 # Create a new dictionary with only that first item
 samples_first = {first_key: samples[first_key]}
 
+total_tasks = 0
 # Count tasks
-total_tasks = len(samples_first[first_key]['list'])
+for s in samples:
+    total_tasks += len(samples[s]['list'])
+print(total_tasks)
 
-frames = []
+frames = {"Data":[], "Background $Z,t\\bar{t},t\\bar{t}+V,VVV$":[], "Background $ZZ^{*}$":[],"Signal ($m_H$ = 125 GeV)":[]}
 
 # Send tasks
-for s in samples_first:   # iterate over the keys of the chopped dictionary
+for s in samples:
     print(f"Processing {s} samples")
-    for idx in range(len(samples_first[s]['list'])):
+    for idx in range(len(samples[s]['list'])):
         channel.basic_publish(
             exchange='',
             routing_key='task_queue',
-            body=str(idx)
+            body=str(idx),
+            properties=pika.BasicProperties(headers={"sample_type": s})
         )
 
 received_count = 0
 # Get results back
 def callback(ch, method, properties, body):
     global received_count
-    serialized_data = json.loads(body.decode())
-    sample_data = [ak.from_json(d_json) for d_json in serialized_data]
-    frames.append(ak.concatenate(sample_data))
-    received_count += 1
+    msg = body.decode()
+    if msg == "No data":
+        received_count += 1
+    else:
+        serialized_data = json.loads(msg)
+        sample_data = [ak.from_json(d_json) for d_json in serialized_data]
+        samp = properties.headers.get("sample_type")
+        frames[samp].append(ak.concatenate(sample_data))
+        received_count += 1/properties.headers.get("batch")
+        print(f" {received_count}  {samp}  {properties.headers.get('batch')}")
     if received_count >= total_tasks:
         ch.stop_consuming()
 
@@ -133,7 +143,8 @@ print("Waiting for results...")
 channel.start_consuming()
 
 # PLOTTING
-all_data["Data"] = ak.concatenate(frames)
+for s in samples:
+    all_data[s] = ak.concatenate(frames[s])
 
 # x-axis range of the plot
 xmin = 80 * GeV
@@ -167,7 +178,6 @@ for s in samples: # loop over samples
         mc_weights.append( ak.to_numpy(all_data[s].totalWeight) ) # append to the list of Monte Carlo weights
         mc_colors.append( samples[s]['color'] ) # append to the list of Monte Carlo bar colors
         mc_labels.append( s ) # append to the list of Monte Carlo legend labels
-
 # *************
 # Main plot
 # *************
@@ -257,4 +267,8 @@ plt.text(0.1, # x
 # draw the legend
 my_legend = main_axes.legend( frameon=False, fontsize=16 ) # no box around the legend
 
-plt.savefig("/app/plot.png")
+plt.savefig("/app/output/plot.png")
+
+for i in range(2):
+    channel.basic_publish(exchange='', routing_key='task_queue', body="fin")
+connection.close()
