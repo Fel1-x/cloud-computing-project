@@ -173,26 +173,26 @@ def calculation(idx, s):
     return sample_data
 
 def callback(ch, method, properties, body):
-    msg = body.decode()
-    if msg == "fin":
+    msg = body.decode() # Decode the message
+    if msg == "fin": # If the message is fin (the full dataset has been reached) stop listening.
         channel.stop_consuming()
         connection.close()
     else:
-        idx = int(msg)   # receive plain index
+        idx = int(msg) # make the index into an integer
         print(f"Worker processing index: {idx}")
-        s = properties.headers.get("sample_type")
-
+        s = properties.headers.get("sample_type") # Find the sample type from the metadata
         sample_datas = []
-        sample_data = calculation(idx, s)
-        for c in sample_data:
+        sample_data = calculation(idx, s) # Perform the calculation for the required indecies
+        for c in sample_data: # save sample_data into 10,000 long chunks, this means the tranfer cap is never reached.
             for i in range(0, len(c), 10000):
                 sample_datas.append(c[i : i+10000])
                 print(f"saving {i} to {min(len(c), i+10000)}")
 
+        # Send all the chunks back on the results queue (if empty still send a message but just with "No data"
         if sample_datas == []:
             channel.basic_publish(exchange='', routing_key='result_queue', body="No data")
         else:
-            # Send result back
+            # Send result back in serialised JSON formats (strings that can be converted on the other end).
             for datum in sample_datas:
                 serialized_data = [ak.to_json(ak.Array([d])) for d in datum]
                 channel.basic_publish(exchange='', routing_key='result_queue', body=json.dumps(serialized_data),
@@ -201,7 +201,7 @@ def callback(ch, method, properties, body):
         # Acknowledge completion
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
-# Ensure fair dispatch (one task at a time per worker)
+# Ensure one task at a time per worker
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(queue='task_queue', on_message_callback=callback)
 

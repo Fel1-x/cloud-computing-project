@@ -78,6 +78,152 @@ def calc_weight(weight_variables, events):
         total_weight = total_weight * abs(events[variable])
     return total_weight
 
+# Plotting defined as a function and changed to work every time new data gets added.
+# This mostly means adjustments to the function to check for empty arrays and ensure they dont throw errors.
+def plotting(samples, frames, all_data):
+    for s in samples:
+        if frames[s]:  # only concatenate non empty frames, this was we can plot as data comes in.
+            all_data[s] = ak.concatenate(frames[s])
+
+    # x-axis range of the plot
+    xmin = 80 * GeV
+    xmax = 250 * GeV
+
+    # Histogram bin setup
+    step_size = 2.5 * GeV
+    bin_edges = np.arange(start=xmin,  # The interval includes this value
+                          stop=xmax + step_size,  # The interval doesn't include this value
+                          step=step_size)  # Spacing between values
+    bin_centres = np.arange(start=xmin + step_size / 2,  # The interval includes this value
+                            stop=xmax + step_size / 2,  # The interval doesn't include this value
+                            step=step_size)  # Spacing between values
+
+    data_x, _ = np.histogram(ak.to_numpy(all_data['Data']['mass']),
+                             bins=bin_edges)  # histogram the data
+    data_x_errors = np.sqrt(data_x)  # statistical error on the data
+
+    if len(all_data[r'Signal ($m_H$ = 125 GeV)']) > 0:
+        signal_x = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass'])
+        signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight)
+    else:
+        signal_x = np.array([])
+        signal_weights = np.array([])
+
+    signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color']  # get the colour for the signal bar
+
+    mc_x = []  # define list to hold the Monte Carlo histogram entries
+    mc_weights = []  # define list to hold the Monte Carlo weights
+    mc_colors = []  # define list to hold the colors of the Monte Carlo bars
+    mc_labels = []  # define list to hold the legend labels of the Monte Carlo bars
+
+    for s in samples:
+        if s not in ['Data', r'Signal ($m_H$ = 125 GeV)']:
+            if len(all_data[s]) > 0 and 'mass' in all_data[s].fields:
+                mc_x.append(ak.to_numpy(all_data[s]['mass']))
+                mc_weights.append(ak.to_numpy(all_data[s].totalWeight))  # append to the list of Monte Carlo weights
+                mc_colors.append(samples[s]['color'])  # append to the list of Monte Carlo bar colors
+                mc_labels.append(s)  # append to the list of Monte Carlo legend labels
+    # *************
+    # Main plot
+    # *************
+    fig, main_axes = plt.subplots(figsize=(12, 8))
+
+    # plot the data points
+    main_axes.errorbar(x=bin_centres, y=data_x, yerr=data_x_errors,
+                       fmt='ko',  # 'k' means black and 'o' is for circles
+                       label='Data')
+
+    # plot the Monte Carlo bars
+    if mc_colors:
+        mc_heights = main_axes.hist(mc_x, bins=bin_edges,
+                                    weights=mc_weights, stacked=True,
+                                    color=mc_colors, label=mc_labels)
+    else:
+        mc_heights = main_axes.hist(mc_x, bins=bin_edges,
+                                    weights=mc_weights, stacked=True,
+                                    label=mc_labels)
+
+    mc_x_tot = mc_heights[0][-1]  # stacked background MC y-axis value
+
+
+    # calculate MC statistical uncertainty: sqrt(sum w^2)
+    if mc_x and mc_weights:
+        mc_x_err = np.sqrt(np.histogram(np.hstack(mc_x), bins=bin_edges, weights=np.hstack(mc_weights) ** 2)[0])
+    else:
+        mc_x_err = np.zeros(len(bin_edges) - 1)
+
+    # plot the signal bar
+    signal_heights = main_axes.hist(signal_x, bins=bin_edges, bottom=mc_x_tot,
+                                    weights=signal_weights, color=signal_color,
+                                    label=r'Signal ($m_H$ = 125 GeV)')
+
+    # plot the statistical uncertainty
+    main_axes.bar(bin_centres,  # x
+                  2 * mc_x_err,  # heights
+                  alpha=0.5,  # half transparency
+                  bottom=mc_x_tot - mc_x_err, color='none',
+                  hatch="////", width=step_size, label='Stat. Unc.')
+
+    # set the x-limit of the main axes
+    main_axes.set_xlim(left=xmin, right=xmax)
+
+    # separation of x axis minor ticks
+    main_axes.xaxis.set_minor_locator(AutoMinorLocator())
+
+    # set the axis tick parameters for the main axes
+    main_axes.tick_params(which='both',  # ticks on both x and y axes
+                          direction='in',  # Put ticks inside and outside the axes
+                          top=True,  # draw ticks on the top axis
+                          right=True)  # draw ticks on right axis
+
+    # x-axis label
+    main_axes.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
+                         fontsize=13, x=1, horizontalalignment='right')
+
+    # write y-axis label for main axes
+    main_axes.set_ylabel('Events / ' + str(step_size) + ' GeV',
+                         y=1, horizontalalignment='right')
+
+    # set y-axis limits for main axes
+    main_axes.set_ylim(bottom=0, top=np.amax(data_x) * 2.0)
+
+    # add minor ticks on y-axis for main axes
+    main_axes.yaxis.set_minor_locator(AutoMinorLocator())
+
+    # Add text 'ATLAS Open Data' on plot
+    plt.text(0.1,  # x
+             0.93,  # y
+             'ATLAS Open Data - Felix Mac-Fall',  # text
+             transform=main_axes.transAxes,  # coordinate system used is that of main_axes
+             fontsize=16)
+
+    # Add text 'for education' on plot
+    plt.text(0.1,  # x
+             0.88,  # y
+             'for education',  # text
+             transform=main_axes.transAxes,  # coordinate system used is that of main_axes
+             style='italic',
+             fontsize=12)
+
+    # Add energy and luminosity
+    lumi_used = str(lumi * fraction)  # luminosity to write on the plot
+    plt.text(0.1,  # x
+             0.82,  # y
+             r'$\sqrt{s}$=13 TeV,$\int$L dt = ' + lumi_used + ' fb$^{-1}$',  # text
+             transform=main_axes.transAxes, fontsize=16)  # coordinate system used is that of main_axes
+
+    # Add a label for the analysis carried out
+    plt.text(0.1,  # x
+             0.76,  # y
+             r'$H \rightarrow ZZ^* \rightarrow 4\ell$',  # text
+             transform=main_axes.transAxes, fontsize=16)  # coordinate system used is that of main_axes
+
+    # draw the legend
+    my_legend = main_axes.legend(frameon=False, fontsize=16)  # no box around the legend
+
+    plt.savefig("/app/output/plot.png")
+
+
 # Set luminosity to 36.6 fb-1, data size of the full release
 lumi = 36.6
 
@@ -85,7 +231,7 @@ lumi = 36.6
 fraction = 1.0 # reduce this is if you want quicker runtime (implemented in the loop over the tree)
 
 # Define empty dictionary to hold awkward arrays
-all_data = {}
+all_data = {s: ak.Array([]) for s in samples}
 
 import pika, json
 
@@ -109,7 +255,7 @@ print(total_tasks)
 
 frames = {"Data":[], "Background $Z,t\\bar{t},t\\bar{t}+V,VVV$":[], "Background $ZZ^{*}$":[],"Signal ($m_H$ = 125 GeV)":[]}
 
-# Send tasks
+# Divide up the tasks between workers and send them.
 for s in samples:
     print(f"Processing {s} samples")
     for idx in range(len(samples[s]['list'])):
@@ -121,19 +267,28 @@ for s in samples:
         )
 
 received_count = 0
+
 # Get results back
 def callback(ch, method, properties, body):
     global received_count
-    msg = body.decode()
-    if msg == "No data":
+    msg = body.decode() # Decode the message
+    if msg == "No data": # If empty, still record the "recieved_count" for finishing
         received_count += 1
     else:
+        # unpack all the data from the JSON strings and awkward arrays
         serialized_data = json.loads(msg)
         sample_data = [ak.from_json(d_json) for d_json in serialized_data]
         samp = properties.headers.get("sample_type")
         frames[samp].append(ak.concatenate(sample_data))
+
+        # Count the revieved data points based on how many they had to get split into during sending
         received_count += 1/properties.headers.get("batch")
+
+        # print statement for checking correct operation
         print(f" {received_count}  {samp}  {properties.headers.get('batch')}")
+
+        # Plot every time data is received from the workers, this way we get live updates on the webserver!
+        plotting(samples, frames, all_data)
     if received_count >= total_tasks:
         ch.stop_consuming()
 
@@ -142,133 +297,6 @@ channel.basic_consume(queue='result_queue', on_message_callback=callback, auto_a
 print("Waiting for results...")
 channel.start_consuming()
 
-# PLOTTING
-for s in samples:
-    all_data[s] = ak.concatenate(frames[s])
-
-# x-axis range of the plot
-xmin = 80 * GeV
-xmax = 250 * GeV
-
-# Histogram bin setup
-step_size = 2.5 * GeV
-bin_edges = np.arange(start=xmin, # The interval includes this value
-                    stop=xmax+step_size, # The interval doesn't include this value
-                    step=step_size ) # Spacing between values
-bin_centres = np.arange(start=xmin+step_size/2, # The interval includes this value
-                        stop=xmax+step_size/2, # The interval doesn't include this value
-                        step=step_size ) # Spacing between values
-
-data_x,_ = np.histogram(ak.to_numpy(all_data['Data']['mass']),
-                        bins=bin_edges ) # histogram the data
-data_x_errors = np.sqrt( data_x ) # statistical error on the data
-
-signal_x = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass']) # histogram the signal
-signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight) # get the weights of the signal events
-signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color'] # get the colour for the signal bar
-
-mc_x = [] # define list to hold the Monte Carlo histogram entries
-mc_weights = [] # define list to hold the Monte Carlo weights
-mc_colors = [] # define list to hold the colors of the Monte Carlo bars
-mc_labels = [] # define list to hold the legend labels of the Monte Carlo bars
-
-for s in samples: # loop over samples
-    if s not in ['Data', r'Signal ($m_H$ = 125 GeV)']: # if not data nor signal
-        mc_x.append( ak.to_numpy(all_data[s]['mass']) ) # append to the list of Monte Carlo histogram entries
-        mc_weights.append( ak.to_numpy(all_data[s].totalWeight) ) # append to the list of Monte Carlo weights
-        mc_colors.append( samples[s]['color'] ) # append to the list of Monte Carlo bar colors
-        mc_labels.append( s ) # append to the list of Monte Carlo legend labels
-# *************
-# Main plot
-# *************
-fig, main_axes = plt.subplots(figsize=(12, 8))
-
-# plot the data points
-main_axes.errorbar(x=bin_centres, y=data_x, yerr=data_x_errors,
-                    fmt='ko', # 'k' means black and 'o' is for circles
-                    label='Data')
-
-# plot the Monte Carlo bars
-mc_heights = main_axes.hist(mc_x, bins=bin_edges,
-                            weights=mc_weights, stacked=True,
-                            color=mc_colors, label=mc_labels )
-
-mc_x_tot = mc_heights[0][-1] # stacked background MC y-axis value
-
-# calculate MC statistical uncertainty: sqrt(sum w^2)
-mc_x_err = np.sqrt(np.histogram(np.hstack(mc_x), bins=bin_edges, weights=np.hstack(mc_weights)**2)[0])
-
-# plot the signal bar
-signal_heights = main_axes.hist(signal_x, bins=bin_edges, bottom=mc_x_tot,
-                weights=signal_weights, color=signal_color,
-                label=r'Signal ($m_H$ = 125 GeV)')
-
-# plot the statistical uncertainty
-main_axes.bar(bin_centres, # x
-                2*mc_x_err, # heights
-                alpha=0.5, # half transparency
-                bottom=mc_x_tot-mc_x_err, color='none',
-                hatch="////", width=step_size, label='Stat. Unc.' )
-
-# set the x-limit of the main axes
-main_axes.set_xlim( left=xmin, right=xmax )
-
-# separation of x axis minor ticks
-main_axes.xaxis.set_minor_locator( AutoMinorLocator() )
-
-# set the axis tick parameters for the main axes
-main_axes.tick_params(which='both', # ticks on both x and y axes
-                        direction='in', # Put ticks inside and outside the axes
-                        top=True, # draw ticks on the top axis
-                        right=True ) # draw ticks on right axis
-
-# x-axis label
-main_axes.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
-                    fontsize=13, x=1, horizontalalignment='right' )
-
-# write y-axis label for main axes
-main_axes.set_ylabel('Events / '+str(step_size)+' GeV',
-                        y=1, horizontalalignment='right')
-
-# set y-axis limits for main axes
-main_axes.set_ylim( bottom=0, top=np.amax(data_x)*2.0 )
-
-# add minor ticks on y-axis for main axes
-main_axes.yaxis.set_minor_locator( AutoMinorLocator() )
-
-# Add text 'ATLAS Open Data' on plot
-plt.text(0.1, # x
-            0.93, # y
-            'ATLAS Open Data', # text
-            transform=main_axes.transAxes, # coordinate system used is that of main_axes
-            fontsize=16 )
-
-# Add text 'for education' on plot
-plt.text(0.1, # x
-            0.88, # y
-            'for education', # text
-            transform=main_axes.transAxes, # coordinate system used is that of main_axes
-            style='italic',
-            fontsize=12 )
-
-# Add energy and luminosity
-lumi_used = str(lumi*fraction) # luminosity to write on the plot
-plt.text(0.1, # x
-            0.82, # y
-            r'$\sqrt{s}$=13 TeV,$\int$L dt = '+lumi_used+' fb$^{-1}$', # text
-            transform=main_axes.transAxes,fontsize=16 ) # coordinate system used is that of main_axes
-
-# Add a label for the analysis carried out
-plt.text(0.1, # x
-            0.76, # y
-            r'$H \rightarrow ZZ^* \rightarrow 4\ell$', # text
-            transform=main_axes.transAxes,fontsize=16 ) # coordinate system used is that of main_axes
-
-# draw the legend
-my_legend = main_axes.legend( frameon=False, fontsize=16 ) # no box around the legend
-
-plt.savefig("/app/output/plot.png")
-
-for i in range(2):
+for i in range(1000): # May require adjustment if node size is large enough, but unlikely (even scaled up)
     channel.basic_publish(exchange='', routing_key='task_queue', body="fin")
 connection.close()
