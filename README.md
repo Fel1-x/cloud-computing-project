@@ -36,8 +36,6 @@ docker compose down
 
 ## Changing Worker Count
 
-### Adjusting Worker Count
-
 To alter the number of workers, edit the `docker-compose.yml` file:
 
 ```yaml
@@ -48,3 +46,9 @@ worker:
   deploy:
     mode: replicated
     replicas: 2   # change this value to the desired worker count (>1)
+```
+---
+
+## Output
+
+The plot output should be viewable, after programme completion in the `output` folder
