@@ -1,3 +1,5 @@
+# Discovering the Higgs Boson with Cloud Computing.
+
 This repository outlines two approaches for a parallelised workflow of the [ATLAS Open data higgs boson discovery analysis](https://github.com/atlas-outreach-data-tools/notebooks-collection-opendata/blob/master/13-TeV-examples/uproot_python/HZZAnalysis.ipynb).
 
 This branch contains the instructions on how to set up a Kubernetes approach whilst branch `docker-compose' contains a Docker Compose + Swarm approach.
