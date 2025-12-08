@@ -33,6 +33,8 @@ kubectl get svc
 
 ## Change the Worker Count
 
+Alter the replicas flag to specify the worker count.
+
 ```bash
 kubectl scale deployment worker --replicas=3
 ```
