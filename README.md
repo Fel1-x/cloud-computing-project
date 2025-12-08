@@ -31,6 +31,14 @@ kubectl get svc
 
 ---
 
+## Change the Worker Count
+
+```bash
+kubectl scale deployment worker --replicas=3
+```
+
+---
+
 ## Access the Webserver
 
 Open the plotting endpoint in your browser using the NodePort assigned to the webserver:
