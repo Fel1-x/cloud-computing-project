@@ -1,6 +1,6 @@
 ## Build Docker Images
 
-First, build the Docker images for the worker and main services, then push them to your registry:
+First, build the Docker images for the worker and main services:
 
 ```bash
 docker build -t felixgroup/worker:latest ./worker
