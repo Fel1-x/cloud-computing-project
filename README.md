@@ -51,7 +51,6 @@ webserver    NodePort    10.106.242.158   <none>        80:30641/TCP         5s
 ```
 
 In this case, **30641** is the port to be added to the URL.
-```
 
 ---
 
