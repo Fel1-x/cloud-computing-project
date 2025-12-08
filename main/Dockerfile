@@ -1,6 +1,6 @@
 FROM python:3.11
 
-# Create virtual environment
+# Create a virtual environment
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip setuptools wheel
 
