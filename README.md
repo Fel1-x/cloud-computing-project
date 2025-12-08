@@ -1,4 +1,4 @@
-## Build and Push Docker Images
+## Build Docker Images
 
 First, build the Docker images for the worker and main services, then push them to your registry:
 
