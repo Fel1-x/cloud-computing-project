@@ -1,9 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: Deployment # This manifest is a deployment
 metadata:
   name: main
 spec:
-  replicas: 1
+  replicas: 1 # Only a single replica of the main pod
   selector:
     matchLabels:
       app: main
@@ -13,12 +13,12 @@ spec:
         app: main
     spec:
       containers:
-        - name: main
-          image: felixgroup/main:latest
-          volumeMounts:
+        - name: main 
+          image: felixgroup/main:latest # The image to be run in the pod
+          volumeMounts: # Mount a volume inside the container
             - name: output-volume
               mountPath: /app/output
-      volumes:
+      volumes: # Define a volume and bind it to the PVC
         - name: output-volume
           persistentVolumeClaim:
             claimName: output-pvc

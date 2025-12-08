@@ -1,10 +1,10 @@
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: PersistentVolumeClaim # Define the resource type
 metadata:
-  name: output-pvc
+  name: output-pvc # Name the PVC, in this case output-pvc
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce # Can only be mounted by one node (main pod)
   resources:
     requests:
-      storage: 100Mi
+      storage: 100Mi # Storage, more than enough for one plot.png

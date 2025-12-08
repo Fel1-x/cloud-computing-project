@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: Deployment # Deloyment for the webserver running via nginx
 metadata:
   name: webserver
   labels:
@@ -15,14 +15,14 @@ spec:
         app: webserver
     spec:
       containers:
-        - name: nginx
-          image: nginx:latest
+        - name: nginx # Name of the container in the pod
+          image: nginx:latest # Name of the image (default latest nginx image)
           ports:
-            - containerPort: 80
+            - containerPort: 80 # Expose the port to the container
           volumeMounts:
             - name: output-volume
               mountPath: /usr/share/nginx/html
-      volumes:
+      volumes: # Bind a volume to the PVC
         - name: output-volume
           persistentVolumeClaim:
             claimName: output-pvc

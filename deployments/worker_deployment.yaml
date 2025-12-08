@@ -1,9 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: Deployment # A deloyment of the worker scripts, see main for more documentation
 metadata:
   name: worker
 spec:
-  replicas: 1
+  replicas: 1 # This can be changed manually to specify replica counts of worker pods.
   selector:
     matchLabels:
       app: worker
