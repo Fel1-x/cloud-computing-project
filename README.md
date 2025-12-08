@@ -5,9 +5,6 @@ First, build the Docker images for the worker and main services, then push them 
 ```bash
 docker build -t felixgroup/worker:latest ./worker
 docker build -t felixgroup/main:latest ./main
-
-docker push felixgroup/main:latest
-docker push felixgroup/worker:latest
 ```
 
 ---
