@@ -8,7 +8,7 @@ To begin either, Docker must be installed on the machine. For the Kubernetes app
 
 ## Start Swarm
 
-First, initalise Docker Swarm.
+First, initalise Docker Swarm in the terminal.
 
 ```bash
 docker swarm init
@@ -18,9 +18,33 @@ docker swarm init
 
 ## Orchestrate Containers with Docker Compose
 
+Enter this command into the terminal.
+
 ```bash
-docker compose down
 docker compose up
 ```
 
+#### Troubleshooting
+
+Only one iteration of docker compose can be used at once, thus running this command before docker compose up can repair some errors.
+
+```bash
+docker compose down
+```
 ---
+
+
+## Changing Worker Count
+
+### Adjusting Worker Count
+
+To alter the number of workers, edit the `docker-compose.yml` file:
+
+```yaml
+worker:
+  build: worker/.
+  networks:
+    - rabbit
+  deploy:
+    mode: replicated
+    replicas: 2   # change this value to the desired worker count (>1)
