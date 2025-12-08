@@ -41,14 +41,17 @@ http://localhost:<insert-port-from-svc-check>/plot.png
 
 Replace `<insert-port-from-svc-check>` with the actual NodePort value shown in the `kubectl get svc` output.
 
-example output:
+### Example output
 
+```
 NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)              AGE
 kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP              3m12s
 rabbitmq     ClusterIP   10.102.191.87    <none>        5672/TCP,15672/TCP   3m2s
-webserver    NodePort    10.106.242.158   <none>        80:**30641**/TCP         5s
+webserver    NodePort    10.106.242.158   <none>        80:30641/TCP         5s
+```
 
-in this case **30641** is the port to be added to the URL.
+In this case, **30641** is the port to be added to the URL.
+```
 
 ---
 
