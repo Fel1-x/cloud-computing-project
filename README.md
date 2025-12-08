@@ -59,6 +59,8 @@ http://localhost:<insert-port-from-svc-check>/plot.png
 
 Replace `<insert-port-from-svc-check>` with the actual NodePort value shown in the `kubectl get svc` output.
 
+PLEASE NOTE: A plot will only appear once results begin being sent back so check the main pod log (outlined at the bottom) before refreshing.
+
 ### Example output
 
 ```
