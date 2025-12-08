@@ -30,7 +30,7 @@ services:
       - rabbit
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 2 # ADJUST THIS VALUE TO ALTER WORKER COUNT
     depends_on:
       rabbitmq:
         condition: service_healthy
